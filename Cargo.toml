@@ -1,6 +1,15 @@
 [package]
-name = "ark-xsk233"
+name = "xsk233-ark"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+ark-ec        = { version = "0.5.0", features = ["parallel"] }
+ark-ff        = { version = "0.5.0", default-features = false, features = ["parallel", "std"] }
+ark-serialize = { version = "0.5.0", features = ["parallel"] }
+ark-std       = { version = "0.5.0", default-features = false, features = ["print-trace"] }
+zeroize       = { version = "1.8.1" }
+educe         = { version = "0.6.0" }
+xs233-sys     = { version = "0.2.0" }
+rand          = { version = "0.8.5" }
+hex           = { version = "0.4.3" }

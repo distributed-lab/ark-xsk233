@@ -1,14 +1,29 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+#![feature(trivial_bounds)]
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+use ark_ff::BigInt;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+pub mod affine;
+mod arithmetics;
+pub mod group;
+pub mod xsk233;
+
+fn bigint_to_le_bytes(scalar: BigInt<4>) -> Vec<u8> {
+    let limbs = scalar.0;
+
+    let mut bytes = Vec::with_capacity(32);
+    for limb in limbs.iter() {
+        bytes.extend_from_slice(&limb.to_le_bytes());
     }
+    bytes.truncate(30);
+
+    // remove trailing zeros
+    // helps reduce iteration in double-and-add iterations
+    while let Some(&last) = bytes.last() {
+        if last == 0 {
+            bytes.pop();
+        } else {
+            break;
+        }
+    }
+    bytes
 }
