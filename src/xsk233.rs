@@ -49,15 +49,17 @@ pub const G_GENERATOR_Y: Fq =
 
 #[cfg(test)]
 mod tests {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    use std::io::{Cursor, Read};
     use super::*;
     use crate::affine::Xsk233Affine;
     use crate::bigint_to_le_bytes;
     use crate::group::Xsk233Projective;
     use ark_ec::{AffineRepr, CurveGroup, VariableBaseMSM};
     use ark_ff::{AdditiveGroup, PrimeField};
+    use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
     use ark_std::UniformRand;
-    use rand::thread_rng;
-    use std::os::raw::c_void;
+    use rand::{thread_rng};
     use xs233_sys::{
         xsk233_add, xsk233_double, xsk233_equals, xsk233_generator, xsk233_mul_frob, xsk233_neg,
         xsk233_neutral, xsk233_point,
@@ -212,5 +214,47 @@ mod tests {
             let equals = xsk233_equals(msm1.inner(), msm2.inner());
             assert!(equals != 0);
         }
+    }
+
+    #[test]
+    fn test_equality() {
+        let mut rng = thread_rng();
+        let scalar1 = Fr::rand(&mut rng);
+        let scalar2 = Fr::rand(&mut rng);
+
+        let g = Xsk233Affine::generator() * scalar1;
+        let h = Xsk233Affine::generator() * scalar2;
+
+        assert_eq!(g, g);
+        assert_eq!(g, g.into_affine());
+        assert_ne!(g, h);
+    }
+
+    #[test]
+    fn test_hashing() {
+        let rng = thread_rng();
+
+        let scalar1 = Fr::from(100);
+        let g = Xsk233Affine::generator() * scalar1;
+
+        let mut hasher = DefaultHasher::new();
+        g.hash(&mut hasher);
+
+        assert_eq!(hasher.finish(), 15456673610726659490);
+    }
+
+    #[test]
+    fn test_serialization(){
+        let rng = thread_rng();
+
+        let scalar1 = Fr::from(100);
+        let g = Xsk233Affine::generator() * scalar1;
+
+        let mut res = Vec::new();
+        g.serialize_compressed(&mut res).unwrap();
+        
+        let g_deserialized = Xsk233Affine::deserialize_compressed(Cursor::new(res)).unwrap();
+
+        assert_eq!(g, g_deserialized);
     }
 }

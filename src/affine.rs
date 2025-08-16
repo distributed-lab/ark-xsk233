@@ -1,7 +1,5 @@
-use ark_ec::{AffineRepr, CurveConfig};
-use ark_serialize::{
-    CanonicalDeserialize, CanonicalSerialize, Compress, SerializationError, Valid, Validate,
-};
+use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, CanonicalSerializeHashExt, Compress, SerializationError, Valid, Validate};
 use ark_std::{
     borrow::Borrow,
     fmt::{Debug, Display, Formatter, Result as FmtResult},
@@ -17,17 +15,15 @@ use std::hash::{Hash, Hasher};
 use std::{fmt, io};
 use std::io::ErrorKind;
 use std::os::raw::c_void;
+use std::collections::hash_map::DefaultHasher;
 
-use ark_ff::{PrimeField, ToConstraintField, fields::Field};
+use ark_ff::{PrimeField, ToConstraintField, fields::Field, AdditiveGroup};
 
 use crate::bigint_to_le_bytes;
 use crate::group::Xsk233Projective;
 use crate::xsk233::Xsk233CurveConfig;
 use educe::Educe;
-use xs233_sys::{
-    xsk233_decode, xsk233_encode, xsk233_generator, xsk233_mul_frob, xsk233_neg, xsk233_neutral,
-    xsk233_point,
-};
+use xs233_sys::{xsk233_decode, xsk233_encode, xsk233_equals, xsk233_generator, xsk233_mul_frob, xsk233_neg, xsk233_neutral, xsk233_point};
 use zeroize::Zeroize;
 
 const COMPRESSED_POINT_SIZE: usize = 30;
@@ -56,20 +52,20 @@ impl Xsk233Affine {
 impl Eq for Xsk233Affine {}
 
 impl PartialEq<Self> for Xsk233Affine {
-    fn eq(&self, _other: &Self) -> bool {
-        unimplemented!()
+    fn eq(&self, other: &Self) -> bool {
+        self.into_group() == other.into_group()
     }
 }
 
 impl PartialEq<Xsk233Projective> for Xsk233Affine {
-    fn eq(&self, _other: &Xsk233Projective) -> bool {
-        unimplemented!()
+    fn eq(&self, other: &Xsk233Projective) -> bool {
+        self == other
     }
 }
 
 impl Hash for Xsk233Affine {
-    fn hash<H: Hasher>(&self, _state: &mut H) {
-        unimplemented!()
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Hash::hash(&self.into_group(), state);
     }
 }
 
@@ -95,15 +91,16 @@ impl Zeroize for Xsk233Affine {
     // The phantom data does not contain element-specific data
     // and thus does not need to be zeroized.
     fn zeroize(&mut self) {
-        unimplemented!()
+        unimplemented!("xsk233-sys crate does not implement zeroize")
     }
 }
 
 impl Distribution<Xsk233Affine> for Standard {
     /// Generates a uniformly random instance of the curve.
     #[inline]
-    fn sample<R: Rng + ?Sized>(&self, _rng: &mut R) -> Xsk233Affine {
-        unimplemented!()
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Xsk233Affine {
+        let rand: Xsk233Projective = rng.r#gen();
+        rand.into()
     }
 }
 
@@ -114,7 +111,9 @@ impl AffineRepr for Xsk233Affine {
     type Group = Xsk233Projective;
 
     fn xy(&self) -> Option<(Self::BaseField, Self::BaseField)> {
-        unimplemented!()
+        unimplemented!("xsk233-sys crate that is used under the hood does not
+        allow to operate with x and y concepts. Therefore, there is no direct way in getting
+        x and y coordinates.")
     }
 
     #[inline]
@@ -123,36 +122,36 @@ impl AffineRepr for Xsk233Affine {
     }
 
     fn zero() -> Self {
-        unimplemented!()
-    }
-
-    fn from_random_bytes(bytes: &[u8]) -> Option<Self> {
         unsafe {
-            let mut result = xsk233_neutral;
-            let success = xsk233_decode(&mut result, bytes.as_ptr() as *mut c_void);
-            if success != 0 {
-                return Some(Xsk233Affine(result));
+            Self {
+                0: xsk233_neutral
             }
-
-            None
         }
     }
 
-    fn mul_bigint(&self, _by: impl AsRef<[u64]>) -> Self::Group {
-        unimplemented!()
+    fn from_random_bytes(bytes: &[u8]) -> Option<Self> {
+        if let Ok(p) = Xsk233Projective::deserialize_compressed(bytes){
+            return Some(p.into_affine());
+        }
+
+        None
+    }
+
+    fn mul_bigint(&self, by: impl AsRef<[u64]>) -> Self::Group {
+        self.into_group().mul_bigint(by)
     }
 
     /// Multiplies this element by the cofactor and output the
     /// resulting projective element.
     fn mul_by_cofactor_to_group(&self) -> Self::Group {
-        unimplemented!()
+        self.mul(Self::ScalarField::from(*Self::Config::COFACTOR.first().unwrap()))
     }
 
     /// Performs cofactor clearing.
     /// The default method is simply to multiply by the cofactor.
     /// Some curves can implement a more efficient algorithm.
     fn clear_cofactor(&self) -> Self {
-        unimplemented!()
+        self.mul_by_cofactor_to_group().into_affine()
     }
 }
 
@@ -283,23 +282,25 @@ impl CanonicalSerialize for Xsk233Affine {
 
 impl Valid for Xsk233Affine {
     fn check(&self) -> Result<(), SerializationError> {
-        unimplemented!()
+        unimplemented!("xsk233-sys does not implement point check")
     }
 }
 
 impl CanonicalDeserialize for Xsk233Affine {
     fn deserialize_with_mode<R: Read>(
-        _reader: R,
-        _compress: Compress,
-        _validate: Validate,
+        reader: R,
+        compress: Compress,
+        validate: Validate,
     ) -> Result<Self, SerializationError> {
-        unimplemented!()
+        Xsk233Projective::deserialize_with_mode(reader, compress, validate).map(|p| p.into_affine())
     }
 }
 
 impl<ConstraintF: Field> ToConstraintField<ConstraintF> for Xsk233Affine {
     #[inline]
     fn to_field_elements(&self) -> Option<Vec<ConstraintF>> {
-        unimplemented!()
+        unimplemented!("xsk233-sys crate that is used under the hood does not
+        allow to operate with x and y concepts. Therefore, there is no direct way in getting
+        field elements.")
     }
 }

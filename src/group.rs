@@ -1,33 +1,21 @@
 use crate::affine::Xsk233Affine;
-use crate::xsk233::Xsk233CurveConfig;
+use crate::xsk233::{Fr, Xsk233CurveConfig};
 use crate::{bigint_to_le_bytes, impl_additive_ops_from_ref};
 use ark_ec::short_weierstrass::SWCurveConfig;
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup, ScalarMul, VariableBaseMSM};
-use ark_ff::{AdditiveGroup, PrimeField, ToConstraintField, fields::Field};
+use ark_ff::{AdditiveGroup, PrimeField, ToConstraintField, fields::Field, BigInt, BigInteger};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, SerializationError, Valid, Validate,
 };
-use ark_std::{
-    Zero,
-    borrow::Borrow,
-    fmt::{Debug, Display, Formatter, Result as FmtResult},
-    hash::{Hash, Hasher},
-    io::{Read, Write},
-    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
-    rand::{
-        Rng,
-        distributions::{Distribution, Standard},
-    },
-    vec::*,
-};
+use ark_std::{Zero, borrow::Borrow, fmt::{Debug, Display, Formatter, Result as FmtResult}, hash::{Hash, Hasher}, io::{Read, Write}, ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign}, rand::{
+    Rng,
+    distributions::{Distribution, Standard},
+}, vec::*, UniformRand};
 use educe::Educe;
 use std::io;
 use std::io::ErrorKind;
 use std::os::raw::c_void;
-use xs233_sys::{
-    xsk233_add, xsk233_double, xsk233_encode, xsk233_mul_frob, xsk233_neg, xsk233_neutral,
-    xsk233_point, xsk233_sub,
-};
+use xs233_sys::{xsk233_add, xsk233_decode, xsk233_double, xsk233_encode, xsk233_equals, xsk233_generator, xsk233_mul_frob, xsk233_neg, xsk233_neutral, xsk233_point, xsk233_sub};
 use zeroize::Zeroize;
 
 #[derive(Educe)]
@@ -63,41 +51,48 @@ impl Debug for Xsk233Projective {
 
 impl Eq for Xsk233Projective {}
 impl PartialEq for Xsk233Projective {
-    fn eq(&self, _other: &Self) -> bool {
-        unimplemented!()
+    fn eq(&self, other: &Self) -> bool {
+        unsafe {
+            xsk233_equals(self.inner(), other.inner()) != 0
+        }
     }
 }
 
 impl PartialEq<Xsk233Affine> for Xsk233Projective {
-    fn eq(&self, _other: &Xsk233Affine) -> bool {
-        unimplemented!()
+    fn eq(&self, other: &Xsk233Affine) -> bool {
+        unsafe {
+            xsk233_equals(self.inner(), other.inner()) != 0
+        }
     }
 }
 
 impl Hash for Xsk233Projective {
-    fn hash<H: Hasher>(&self, _state: &mut H) {
-        unimplemented!()
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let mut ser = Vec::new();
+        if let Ok(()) = self.serialize_compressed(&mut ser) {
+            Hash::hash(&ser, state);
+        }
+    }
+}
+
+impl Zeroize for Xsk233Projective {
+    fn zeroize(&mut self) {
+        unimplemented!("xsk233-sys does not implement zeroize")
     }
 }
 
 impl Distribution<Xsk233Projective> for Standard {
     /// Generates a uniformly random instance of the curve.
     #[inline]
-    fn sample<R: Rng + ?Sized>(&self, _rng: &mut R) -> Xsk233Projective {
-        unimplemented!()
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Xsk233Projective {
+        Xsk233Projective::generator() * Fr::rand(rng)
     }
 }
 
 impl Default for Xsk233Projective {
     #[inline]
     fn default() -> Self {
-        unimplemented!()
-    }
-}
-
-impl Zeroize for Xsk233Projective {
-    fn zeroize(&mut self) {
-        unimplemented!()
+        Xsk233Projective::zero()
     }
 }
 
@@ -111,7 +106,7 @@ impl Zero for Xsk233Projective {
     /// Checks whether `self.z.is_zero()`.
     #[inline]
     fn is_zero(&self) -> bool {
-        unimplemented!()
+        self == &Self::zero()
     }
 }
 
@@ -147,8 +142,17 @@ impl PrimeGroup for Xsk233Projective {
     }
 
     #[inline]
-    fn mul_bigint(&self, _other: impl AsRef<[u64]>) -> Self {
-        unimplemented!()
+    fn mul_bigint(&self, other: impl AsRef<[u64]>) -> Self {
+        let words = other.as_ref();
+
+        // Convert to bytes in little-endian order
+        let mut bytes = Vec::with_capacity(words.len() * 8);
+        for word in words {
+            bytes.extend_from_slice(&word.to_le_bytes());
+        }
+
+        let scalar = Self::ScalarField::from_le_bytes_mod_order(&bytes);
+        self.mul(scalar)
     }
 }
 
@@ -159,9 +163,12 @@ impl CurveGroup for Xsk233Projective {
     type FullGroup = Xsk233Affine;
 
 
+    /// Normalizes a slice of projective elements so that
+    /// conversion to affine is cheap.
     #[inline]
     fn normalize_batch(_v: &[Self]) -> Vec<Self::Affine> {
-        unimplemented!()
+        unimplemented!("xsk233_point structure is used in both affine
+        and projective coordinates so there is no sense in normalization.")
     }
 }
 
@@ -308,6 +315,37 @@ impl CanonicalSerialize for Xsk233Projective {
     }
 }
 
+impl CanonicalDeserialize for Xsk233Projective {
+    fn deserialize_with_mode<R: Read>(
+        mut reader: R,
+        compress: Compress,
+        _validate: Validate,
+    ) -> Result<Self, SerializationError> {
+        if compress == Compress::No {
+            return Err(SerializationError::IoError(io::Error::new(
+                ErrorKind::Unsupported,
+                "deserialization without compression is not supported",
+            )));
+        }
+
+        let mut bytes = [0; 30];
+        reader.read(&mut bytes)?;
+
+        unsafe {
+            let mut result = xsk233_neutral;
+            let success = xsk233_decode(&mut result, bytes.as_ptr() as *mut c_void);
+            if success == 0 {
+                return Err(SerializationError::IoError(io::Error::new(
+                    ErrorKind::Other,
+                    "failed to deserialize",
+                )));
+            }
+
+            Ok(Self(result))
+        }
+    }
+}
+
 impl Valid for Xsk233Projective {
     fn check(&self) -> Result<(), SerializationError> {
         self.into_affine().check()
@@ -322,18 +360,6 @@ impl Valid for Xsk233Projective {
         let batch = batch.copied().collect::<Vec<_>>();
         let batch = Self::normalize_batch(&batch);
         Xsk233Affine::batch_check(batch.iter())
-    }
-}
-
-impl CanonicalDeserialize for Xsk233Projective {
-    fn deserialize_with_mode<R: Read>(
-        _reader: R,
-        _compress: Compress,
-        _validate: Validate,
-    ) -> Result<Self, SerializationError> {
-        // let aff = P::deserialize_with_mode(reader, compress, validate)?;
-        // Ok(aff.into())
-        unimplemented!()
     }
 }
 
