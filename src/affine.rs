@@ -32,6 +32,9 @@ use zeroize::Zeroize;
 
 const COMPRESSED_POINT_SIZE: usize = 30;
 
+/// from xsk233_equals : -1 if two points are equal and 0 if not. This is -1.
+const C_XSK233_EQUALS_TRUE: u32 = 0xFFFFFFFFu32;
+
 /// Affine coordinates for a point on an elliptic curve in short Weierstrass
 /// form, over the base field `P::BaseField`.
 #[derive(Educe)]
@@ -63,7 +66,7 @@ impl PartialEq<Self> for Xsk233Affine {
 
 impl PartialEq<Xsk233Projective> for Xsk233Affine {
     fn eq(&self, other: &Xsk233Projective) -> bool {
-        unsafe { 0xFFFFFFFFu32 == xsk233_equals(self.inner(), other.inner()) }
+        unsafe { C_XSK233_EQUALS_TRUE == xsk233_equals(self.inner(), other.inner()) }
     }
 }
 
@@ -125,7 +128,7 @@ impl AffineRepr for Xsk233Affine {
     }
 
     fn is_zero(&self) -> bool {
-        unsafe { 0xFFFFFFFFu32 == xsk233_equals(&xsk233_neutral, &self.0) }
+        unsafe { C_XSK233_EQUALS_TRUE == xsk233_equals(&xsk233_neutral, &self.0) }
     }
 
     #[inline]
