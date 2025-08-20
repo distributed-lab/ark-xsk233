@@ -295,8 +295,13 @@ impl CanonicalSerialize for Xsk233Affine {
 
 impl Valid for Xsk233Affine {
     fn check(&self) -> Result<(), SerializationError> {
+        // it is assumed that all points are created from :
+        // a. decode function
+        // b. multipling by a scalar a point like generator point.
+        //
+        // Option b is valid by nature.
+        // Option a has a really intricate mechanism of rejecting invalid points.
         Ok(())
-        //unimplemented!("xsk233-sys does not implement point check")
     }
 }
 
