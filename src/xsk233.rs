@@ -50,7 +50,7 @@ pub const G_GENERATOR_Y: Fq =
 #[cfg(test)]
 mod tests {
     use std::hash::{DefaultHasher, Hash, Hasher};
-    use std::io::{Cursor, Read};
+    use std::io::{Cursor};
     use super::*;
     use crate::affine::Xsk233Affine;
     use crate::bigint_to_le_bytes;
@@ -154,7 +154,6 @@ mod tests {
         unsafe {
             let mut rng = thread_rng();
             let scalar1 = Fr::rand(&mut rng);
-            let scalar2 = Fr::rand(&mut rng);
 
             let p1_xsk = rand_xsk233_sys_point(scalar1);
             let p1_ark = rand_xsk233_ark_point(scalar1);
@@ -179,7 +178,6 @@ mod tests {
         unsafe {
             let mut rng = thread_rng();
             let scalar1 = Fr::rand(&mut rng);
-            let scalar2 = Fr::rand(&mut rng);
 
             let p1_xsk = rand_xsk233_sys_point(scalar1);
             let p1_ark = rand_xsk233_ark_point(scalar1);
@@ -232,8 +230,6 @@ mod tests {
 
     #[test]
     fn test_hashing() {
-        let rng = thread_rng();
-
         let scalar1 = Fr::from(100);
         let g = Xsk233Affine::generator() * scalar1;
 
@@ -245,8 +241,6 @@ mod tests {
 
     #[test]
     fn test_serialization(){
-        let rng = thread_rng();
-
         let scalar1 = Fr::from(100);
         let g = Xsk233Affine::generator() * scalar1;
 
