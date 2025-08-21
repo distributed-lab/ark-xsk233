@@ -3,19 +3,31 @@ use crate::xsk233::{Fr, Xsk233CurveConfig};
 use crate::{bigint_to_le_bytes, impl_additive_ops_from_ref};
 use ark_ec::short_weierstrass::SWCurveConfig;
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup, ScalarMul, VariableBaseMSM};
-use ark_ff::{AdditiveGroup, PrimeField, ToConstraintField, fields::Field, BigInt, BigInteger};
+use ark_ff::{AdditiveGroup, PrimeField, ToConstraintField, fields::Field};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, SerializationError, Valid, Validate,
 };
-use ark_std::{Zero, borrow::Borrow, fmt::{Debug, Display, Formatter, Result as FmtResult}, hash::{Hash, Hasher}, io::{Read, Write}, ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign}, rand::{
-    Rng,
-    distributions::{Distribution, Standard},
-}, vec::*, UniformRand};
+use ark_std::{
+    UniformRand, Zero,
+    borrow::Borrow,
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
+    hash::{Hash, Hasher},
+    io::{Read, Write},
+    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    rand::{
+        Rng,
+        distributions::{Distribution, Standard},
+    },
+    vec::*,
+};
 use educe::Educe;
 use std::io;
 use std::io::ErrorKind;
 use std::os::raw::c_void;
-use xs233_sys::{xsk233_add, xsk233_decode, xsk233_double, xsk233_encode, xsk233_equals, xsk233_generator, xsk233_mul_frob, xsk233_neg, xsk233_neutral, xsk233_point, xsk233_sub};
+use xs233_sys::{
+    xsk233_add, xsk233_decode, xsk233_double, xsk233_encode, xsk233_equals, xsk233_mul_frob,
+    xsk233_neg, xsk233_neutral, xsk233_point, xsk233_sub,
+};
 use zeroize::Zeroize;
 
 #[derive(Educe)]
@@ -52,17 +64,13 @@ impl Debug for Xsk233Projective {
 impl Eq for Xsk233Projective {}
 impl PartialEq for Xsk233Projective {
     fn eq(&self, other: &Self) -> bool {
-        unsafe {
-            xsk233_equals(self.inner(), other.inner()) != 0
-        }
+        unsafe { xsk233_equals(self.inner(), other.inner()) != 0 }
     }
 }
 
 impl PartialEq<Xsk233Affine> for Xsk233Projective {
     fn eq(&self, other: &Xsk233Affine) -> bool {
-        unsafe {
-            xsk233_equals(self.inner(), other.inner()) != 0
-        }
+        unsafe { xsk233_equals(self.inner(), other.inner()) != 0 }
     }
 }
 
@@ -112,11 +120,7 @@ impl Zero for Xsk233Projective {
 
 impl Xsk233Projective {
     const fn zero() -> Xsk233Projective {
-        unsafe {
-            Self{
-                0: xsk233_neutral,
-            }
-        }
+        unsafe { Self(xsk233_neutral) }
     }
 }
 
@@ -162,13 +166,14 @@ impl CurveGroup for Xsk233Projective {
     type Affine = Xsk233Affine;
     type FullGroup = Xsk233Affine;
 
-
     /// Normalizes a slice of projective elements so that
     /// conversion to affine is cheap.
     #[inline]
     fn normalize_batch(_v: &[Self]) -> Vec<Self::Affine> {
-        unimplemented!("xsk233_point structure is used in both affine
-        and projective coordinates so there is no sense in normalization.")
+        unimplemented!(
+            "xsk233_point structure is used in both affine
+        and projective coordinates so there is no sense in normalization."
+        )
     }
 }
 
@@ -329,14 +334,13 @@ impl CanonicalDeserialize for Xsk233Projective {
         }
 
         let mut bytes = [0; 30];
-        reader.read(&mut bytes)?;
+        reader.read_exact(&mut bytes)?;
 
         unsafe {
             let mut result = xsk233_neutral;
             let success = xsk233_decode(&mut result, bytes.as_ptr() as *mut c_void);
             if success == 0 {
-                return Err(SerializationError::IoError(io::Error::new(
-                    ErrorKind::Other,
+                return Err(SerializationError::IoError(io::Error::other(
                     "failed to deserialize",
                 )));
             }

@@ -1,5 +1,3 @@
-#![feature(trivial_bounds)]
-
 use ark_ff::BigInt;
 
 pub mod affine;

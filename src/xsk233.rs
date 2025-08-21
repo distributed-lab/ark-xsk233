@@ -49,8 +49,6 @@ pub const G_GENERATOR_Y: Fq =
 
 #[cfg(test)]
 mod tests {
-    use std::hash::{DefaultHasher, Hash, Hasher};
-    use std::io::{Cursor, Read};
     use super::*;
     use crate::affine::Xsk233Affine;
     use crate::bigint_to_le_bytes;
@@ -59,7 +57,9 @@ mod tests {
     use ark_ff::{AdditiveGroup, PrimeField};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
     use ark_std::UniformRand;
-    use rand::{thread_rng};
+    use rand::thread_rng;
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    use std::io::Cursor;
     use xs233_sys::{
         xsk233_add, xsk233_double, xsk233_equals, xsk233_generator, xsk233_mul_frob, xsk233_neg,
         xsk233_neutral, xsk233_point,
@@ -154,7 +154,6 @@ mod tests {
         unsafe {
             let mut rng = thread_rng();
             let scalar1 = Fr::rand(&mut rng);
-            let scalar2 = Fr::rand(&mut rng);
 
             let p1_xsk = rand_xsk233_sys_point(scalar1);
             let p1_ark = rand_xsk233_ark_point(scalar1);
@@ -179,7 +178,6 @@ mod tests {
         unsafe {
             let mut rng = thread_rng();
             let scalar1 = Fr::rand(&mut rng);
-            let scalar2 = Fr::rand(&mut rng);
 
             let p1_xsk = rand_xsk233_sys_point(scalar1);
             let p1_ark = rand_xsk233_ark_point(scalar1);
@@ -232,8 +230,6 @@ mod tests {
 
     #[test]
     fn test_hashing() {
-        let rng = thread_rng();
-
         let scalar1 = Fr::from(100);
         let g = Xsk233Affine::generator() * scalar1;
 
@@ -244,15 +240,13 @@ mod tests {
     }
 
     #[test]
-    fn test_serialization(){
-        let rng = thread_rng();
-
+    fn test_serialization() {
         let scalar1 = Fr::from(100);
         let g = Xsk233Affine::generator() * scalar1;
 
         let mut res = Vec::new();
         g.serialize_compressed(&mut res).unwrap();
-        
+
         let g_deserialized = Xsk233Affine::deserialize_compressed(Cursor::new(res)).unwrap();
 
         assert_eq!(g, g_deserialized);
