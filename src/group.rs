@@ -1,4 +1,4 @@
-use crate::affine::Xsk233Affine;
+use crate::affine::{C_XSK233_EQUALS_TRUE, Xsk233Affine};
 use crate::xsk233::{Fr, Xsk233CurveConfig};
 use crate::{bigint_to_le_bytes, impl_additive_ops_from_ref};
 use ark_ec::short_weierstrass::SWCurveConfig;
@@ -64,13 +64,13 @@ impl Debug for Xsk233Projective {
 impl Eq for Xsk233Projective {}
 impl PartialEq for Xsk233Projective {
     fn eq(&self, other: &Self) -> bool {
-        unsafe { xsk233_equals(self.inner(), other.inner()) != 0 }
+        unsafe { xsk233_equals(self.inner(), other.inner()) == C_XSK233_EQUALS_TRUE }
     }
 }
 
 impl PartialEq<Xsk233Affine> for Xsk233Projective {
     fn eq(&self, other: &Xsk233Affine) -> bool {
-        unsafe { xsk233_equals(self.inner(), other.inner()) != 0 }
+        unsafe { xsk233_equals(self.inner(), other.inner()) == C_XSK233_EQUALS_TRUE }
     }
 }
 
