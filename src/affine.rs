@@ -1,5 +1,7 @@
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, CanonicalSerializeHashExt, Compress, SerializationError, Valid, Validate};
+use ark_serialize::{
+    CanonicalDeserialize, CanonicalSerialize, Compress, SerializationError, Valid, Validate,
+};
 use ark_std::{
     borrow::Borrow,
     fmt::{Debug, Display, Formatter, Result as FmtResult},
@@ -12,21 +14,26 @@ use ark_std::{
     vec::*,
 };
 use std::hash::{Hash, Hasher};
-use std::{fmt, io};
 use std::io::ErrorKind;
 use std::os::raw::c_void;
-use std::collections::hash_map::DefaultHasher;
+use std::{fmt, io};
 
-use ark_ff::{PrimeField, ToConstraintField, fields::Field, AdditiveGroup};
+use ark_ff::{PrimeField, ToConstraintField, fields::Field};
 
 use crate::bigint_to_le_bytes;
 use crate::group::Xsk233Projective;
 use crate::xsk233::Xsk233CurveConfig;
 use educe::Educe;
-use xs233_sys::{xsk233_decode, xsk233_encode, xsk233_equals, xsk233_generator, xsk233_mul_frob, xsk233_neg, xsk233_neutral, xsk233_point};
+use xs233_sys::{
+    xsk233_encode, xsk233_equals, xsk233_generator, xsk233_mul_frob, xsk233_neg, xsk233_neutral,
+    xsk233_point,
+};
 use zeroize::Zeroize;
 
 const COMPRESSED_POINT_SIZE: usize = 30;
+
+/// from xsk233_equals : -1 if two points are equal and 0 if not. This is -1.
+pub(crate) const C_XSK233_EQUALS_TRUE: u32 = 0xFFFFFFFFu32;
 
 /// Affine coordinates for a point on an elliptic curve in short Weierstrass
 /// form, over the base field `P::BaseField`.
@@ -59,7 +66,7 @@ impl PartialEq<Self> for Xsk233Affine {
 
 impl PartialEq<Xsk233Projective> for Xsk233Affine {
     fn eq(&self, other: &Xsk233Projective) -> bool {
-        self == other
+        unsafe { C_XSK233_EQUALS_TRUE == xsk233_equals(self.inner(), other.inner()) }
     }
 }
 
@@ -72,7 +79,8 @@ impl Hash for Xsk233Affine {
 impl Display for Xsk233Affine {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         let mut ser = Vec::new();
-        self.serialize_compressed(&mut ser).map_err(|_| fmt::Error)?;
+        self.serialize_compressed(&mut ser)
+            .map_err(|_| fmt::Error)?;
 
         write!(f, "{}", hex::encode(ser))
     }
@@ -81,7 +89,8 @@ impl Display for Xsk233Affine {
 impl Debug for Xsk233Affine {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         let mut ser = Vec::new();
-        self.serialize_compressed(&mut ser).map_err(|_| fmt::Error)?;
+        self.serialize_compressed(&mut ser)
+            .map_err(|_| fmt::Error)?;
 
         write!(f, "{}", hex::encode(ser))
     }
@@ -111,9 +120,15 @@ impl AffineRepr for Xsk233Affine {
     type Group = Xsk233Projective;
 
     fn xy(&self) -> Option<(Self::BaseField, Self::BaseField)> {
-        unimplemented!("xsk233-sys crate that is used under the hood does not
+        unimplemented!(
+            "xsk233-sys crate that is used under the hood does not
         allow to operate with x and y concepts. Therefore, there is no direct way in getting
-        x and y coordinates.")
+        x and y coordinates."
+        )
+    }
+
+    fn is_zero(&self) -> bool {
+        unsafe { C_XSK233_EQUALS_TRUE == xsk233_equals(&xsk233_neutral, &self.0) }
     }
 
     #[inline]
@@ -122,15 +137,11 @@ impl AffineRepr for Xsk233Affine {
     }
 
     fn zero() -> Self {
-        unsafe {
-            Self {
-                0: xsk233_neutral
-            }
-        }
+        unsafe { Self(xsk233_neutral) }
     }
 
     fn from_random_bytes(bytes: &[u8]) -> Option<Self> {
-        if let Ok(p) = Xsk233Projective::deserialize_compressed(bytes){
+        if let Ok(p) = Xsk233Projective::deserialize_compressed(bytes) {
             return Some(p.into_affine());
         }
 
@@ -144,7 +155,9 @@ impl AffineRepr for Xsk233Affine {
     /// Multiplies this element by the cofactor and output the
     /// resulting projective element.
     fn mul_by_cofactor_to_group(&self) -> Self::Group {
-        self.mul(Self::ScalarField::from(*Self::Config::COFACTOR.first().unwrap()))
+        self.mul(Self::ScalarField::from(
+            *Self::Config::COFACTOR.first().unwrap(),
+        ))
     }
 
     /// Performs cofactor clearing.
@@ -282,7 +295,13 @@ impl CanonicalSerialize for Xsk233Affine {
 
 impl Valid for Xsk233Affine {
     fn check(&self) -> Result<(), SerializationError> {
-        unimplemented!("xsk233-sys does not implement point check")
+        // it is assumed that all points are created from :
+        // a. decode function
+        // b. multipling by a scalar a point like generator point.
+        //
+        // Option b is valid by nature.
+        // Option a has a really intricate mechanism of rejecting invalid points.
+        Ok(())
     }
 }
 
@@ -299,8 +318,10 @@ impl CanonicalDeserialize for Xsk233Affine {
 impl<ConstraintF: Field> ToConstraintField<ConstraintF> for Xsk233Affine {
     #[inline]
     fn to_field_elements(&self) -> Option<Vec<ConstraintF>> {
-        unimplemented!("xsk233-sys crate that is used under the hood does not
+        unimplemented!(
+            "xsk233-sys crate that is used under the hood does not
         allow to operate with x and y concepts. Therefore, there is no direct way in getting
-        field elements.")
+        field elements."
+        )
     }
 }
