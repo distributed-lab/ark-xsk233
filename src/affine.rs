@@ -30,7 +30,7 @@ use xs233_sys::{
 };
 use zeroize::Zeroize;
 
-const COMPRESSED_POINT_SIZE: usize = 30;
+pub const COMPRESSED_POINT_SIZE: usize = 30;
 
 /// from xsk233_equals : -1 if two points are equal and 0 if not. This is -1.
 pub(crate) const C_XSK233_EQUALS_TRUE: u32 = 0xFFFFFFFFu32;
