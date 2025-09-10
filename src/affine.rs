@@ -35,9 +35,6 @@ pub const COMPRESSED_POINT_SIZE: usize = 30;
 /// from xsk233_equals : -1 if two points are equal and 0 if not. This is -1.
 pub(crate) const C_XSK233_EQUALS_TRUE: u32 = 0xFFFFFFFFu32;
 
-/// from xsk233_equals : -1 if two points are equal and 0 if not. This is -1.
-pub(crate) const C_XSK233_EQUALS_TRUE: u32 = 0xFFFFFFFFu32;
-
 /// Affine coordinates for a point on an elliptic curve in short Weierstrass
 /// form, over the base field `P::BaseField`.
 #[derive(Educe)]
